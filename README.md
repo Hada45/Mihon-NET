@@ -1,6 +1,6 @@
-# Mihon Net
+# Mihon NET
 
-Mihon Net is a fork of [Mihon](https://github.com/mihonapp/mihon) that adds direct streaming support for local network storage (SMB / Windows Share and FTP).
+Mihon NET is a fork of [Mihon](https://github.com/mihonapp/mihon) that adds direct streaming support for local network storage (SMB / Windows Share and FTP) and companion download workers.
 
 > [!NOTE]
 > **Experimental / Vibe-Coded Project**:
@@ -21,7 +21,7 @@ Mihon Net is a fork of [Mihon](https://github.com/mihonapp/mihon) that adds dire
 
 ## Optional Companion Workers
 
-Using a companion worker is **entirely optional**. Mihon Net functions fully on its own as a standalone network reader for streaming manga over SMB.
+Using a companion worker is **entirely optional**. Mihon NET functions fully on its own as a standalone network reader for streaming manga over SMB.
 
 When using a worker, Mihon on your phone does **not** perform any downloads directly. It only sends download commands to the worker. The worker then takes over and downloads chapters directly from the source to its own storage, preserving your phone's battery, bandwidth, and storage.
 
@@ -30,12 +30,20 @@ When using a worker, Mihon on your phone does **not** perform any downloads dire
 
 ---
 
+## Repository Structure
+
+- **`app/`**, **`core/`**, **`domain/`**: Main Mihon NET Android reader app source code.
+- **`pc-worker/`**: Mihon PC Worker (.NET C#) source code.
+- **`stb-worker/`**: Mihon Android / STB Worker source code.
+
+---
+
 ## Getting Started
 
 ### Setting up a Windows Share (SMB)
 1. **On your PC**:
    - Right-click your manga folder > **Properties** > **Sharing** > **Advanced Sharing** > enable sharing and set permissions.
-2. **In Mihon Net**:
+2. **In Mihon NET**:
    - Go to **Settings** > **Data and storage** > **Network storage (SMB)**.
    - Enter your server IP address, share name, and optional login credentials.
    - Return to your Library to browse and read your manga.
@@ -45,7 +53,7 @@ When using a worker, Mihon on your phone does **not** perform any downloads dire
 ## Downloads
 
 Download the latest builds from the [Releases](../../releases) page:
-- **Mihon Net (Main App)**:
+- **Mihon NET (Main App)**:
   - `app-arm64-v8a-debug.apk`: Recommended for modern Android smartphones.
   - `app-universal-debug.apk`: Compatible with all Android CPU architectures.
 - **Optional Companion Workers**:
