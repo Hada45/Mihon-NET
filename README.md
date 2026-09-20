@@ -21,7 +21,7 @@ Mihon NET is a fork of [Mihon](https://github.com/mihonapp/mihon) that adds dire
 
 ## Optional Companion Workers
 
-Using a companion worker is **entirely optional**. Mihon NET functions fully on its own as a standalone network reader for streaming manga over SMB.
+Using a companion worker is **entirely optional**. Mihon NET functions fully on its own as a standalone network reader for streaming manga over SMB and FTP.
 
 When using a worker, Mihon on your phone does **not** perform any downloads directly. It only sends download commands to the worker. The worker then takes over and downloads chapters directly from the source to its own storage, preserving your phone's battery, bandwidth, and storage.
 
