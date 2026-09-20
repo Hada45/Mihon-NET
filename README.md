@@ -15,14 +15,18 @@ Mihon Net is a fork of [Mihon](https://github.com/mihonapp/mihon) that adds dire
 - **Optimized Connection Management**: Bounded connection pooling designed to keep network usage stable and avoid server timeouts.
 - **Local Cache**: Caches accessed pages to disk and memory for seamless forward and backward page navigation.
 - **SMB Performance Logs**: View and share SMB network diagnostics directly from `Settings -> Advanced -> SMB Performance Log`.
-- **Companion Workers**: Offload download tasks to external devices (PC or Android STB) so your phone doesn't spend battery or local storage.
+- **Optional Download Delegation**: Mihon can dispatch download commands to an external worker instead of downloading through your phone.
 
 ---
 
-## Companion Workers
+## Optional Companion Workers
 
-- **Mihon PC Worker (`MihonPcWorker.exe`)**: A lightweight Windows background worker that receives download tasks from your phone and downloads chapters directly into your PC's manga folder (CBZ/folder format).
-- **Mihon Android / STB Worker (`MihonWorker-Android-debug.apk`)**: Run download worker on an Android TV box or secondary device to save downloads to external hard drives or network-attached storage.
+Using a companion worker is **entirely optional**. Mihon Net functions fully on its own as a standalone network reader for streaming manga over SMB.
+
+When using a worker, Mihon on your phone does **not** perform any downloads directly. It only sends download commands to the worker. The worker then takes over and downloads chapters directly from the source to its own storage, preserving your phone's battery, bandwidth, and storage.
+
+- **Mihon PC Worker (`MihonPcWorker.exe`)**: A lightweight standalone Windows service. When commanded by Mihon, it downloads chapters directly from the source into your PC's manga folder (in `.cbz` or folder format).
+- **Mihon Android / STB Worker (`MihonWorker-Android-debug.apk`)**: Run this worker on an Android TV box, TV stick, or secondary Android device. When commanded by Mihon, it downloads chapters directly from the source to connected external drives or storage.
 
 ---
 
@@ -44,7 +48,7 @@ Download the latest builds from the [Releases](../../releases) page:
 - **Mihon Net (Main App)**:
   - `app-arm64-v8a-debug.apk`: Recommended for modern Android smartphones.
   - `app-universal-debug.apk`: Compatible with all Android CPU architectures.
-- **Companion Workers**:
+- **Optional Companion Workers**:
   - `MihonPcWorker.exe`: Windows PC background download worker.
   - `MihonWorker-Android-debug.apk`: Android / STB background download worker.
 
