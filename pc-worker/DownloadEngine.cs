@@ -343,7 +343,7 @@ namespace MihonPcWorker
                 {
                     throw;
                 }
-                catch (HttpRequestException hre) when (hre.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.Gone)
+                catch (HttpRequestException hre) when (hre.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.Gone or HttpStatusCode.NotFound)
                 {
                     throw new NeedsRefreshException($"Page {page.Index}: HTTP {(int)hre.StatusCode!}");
                 }
@@ -383,7 +383,7 @@ namespace MihonPcWorker
 
             using var resp = await _httpClient.SendAsync(reqMsg, HttpCompletionOption.ResponseHeadersRead, ct);
 
-            if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.Gone)
+            if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.Gone or HttpStatusCode.NotFound)
             {
                 throw new NeedsRefreshException($"Page {page.Index}: HTTP {(int)resp.StatusCode}");
             }

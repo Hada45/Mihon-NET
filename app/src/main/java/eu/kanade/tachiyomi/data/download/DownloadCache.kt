@@ -1,4 +1,4 @@
-﻿package eu.kanade.tachiyomi.data.download
+package eu.kanade.tachiyomi.data.download
 
 import android.content.Context
 import androidx.core.net.toUri
@@ -245,6 +245,8 @@ class DownloadCache(
                     sourceDir.mangaDirs += mangaName to it
                 }
                 mangaDir.chapterDirs += chapterDirName
+                // Bump lastRenew to prevent immediate SMB re-scan from overwriting the freshly-added entry
+                lastRenew = System.currentTimeMillis()
                 return@withLock
             }
             // Retrieve the cached source directory or cache a new one

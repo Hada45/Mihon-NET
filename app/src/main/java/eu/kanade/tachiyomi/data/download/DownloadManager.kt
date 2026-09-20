@@ -1,4 +1,4 @@
-﻿package eu.kanade.tachiyomi.data.download
+package eu.kanade.tachiyomi.data.download
 
 import android.content.Context
 import com.hippo.unifile.UniFile
@@ -108,7 +108,7 @@ class DownloadManager(
         return queueState.value.find { it.chapter.id == chapterId }
     }
 
-    fun startDownloadNow(chapterId: Long, isWorker: Boolean = downloadPreferences.downloadWorkerEnabled.get()) {
+    fun startDownloadNow(chapterId: Long, isWorker: Boolean = false) {
         val existingDownload = getQueuedDownloadOrNull(chapterId)
         // If not in queue try to start a new download
         val toAdd = existingDownload ?: runBlocking { downloadFromChapterId(chapterId) }?.apply {
@@ -147,7 +147,7 @@ class DownloadManager(
      * @param chapters the list of chapters to enqueue.
      * @param autoStart whether to start the downloader after enqueing the chapters.
      */
-    suspend fun downloadChapters(manga: Manga, chapters: List<Chapter>, autoStart: Boolean = true, isWorker: Boolean = downloadPreferences.downloadWorkerEnabled.get()) {
+    suspend fun downloadChapters(manga: Manga, chapters: List<Chapter>, autoStart: Boolean = true, isWorker: Boolean = false) {
         downloader.queueChapters(manga, chapters, autoStart, isWorker)
     }
 

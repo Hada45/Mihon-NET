@@ -1,4 +1,4 @@
-﻿package eu.kanade.tachiyomi.data.download
+package eu.kanade.tachiyomi.data.download
 
 import android.content.Context
 import com.hippo.unifile.UniFile
@@ -273,7 +273,7 @@ class Downloader(
      * @param chapters the list of chapters to download.
      * @param autoStart whether to start the downloader after enqueing the chapters.
      */
-    suspend fun queueChapters(manga: Manga, chapters: List<Chapter>, autoStart: Boolean, isWorker: Boolean = downloadPreferences.downloadWorkerEnabled.get()) {
+    suspend fun queueChapters(manga: Manga, chapters: List<Chapter>, autoStart: Boolean, isWorker: Boolean = false) {
         if (chapters.isEmpty()) return
 
         val source = sourceManager.get(manga.source) as? HttpSource ?: return
@@ -399,7 +399,6 @@ class Downloader(
                     cache.addChapter("$chapterDirname.cbz", dummyMangaDir, download.manga)
                 }
             }
-            cache.invalidateCache()
 
             download.status = Download.State.DOWNLOADED
         } catch (error: Throwable) {
@@ -416,7 +415,7 @@ class Downloader(
     }
 
     private suspend fun downloadChapter(download: Download) {
-        if (download.isWorker || downloadPreferences.downloadWorkerEnabled.get()) {
+        if (download.isWorker) {
             downloadWithWorker(download)
             return
         }
@@ -549,6 +548,9 @@ class Downloader(
                 tmpDir.renameTo(chapterDirname)
             }
             cache.addChapter(chapterDirname, mangaDir, download.manga)
+            if (downloadPreferences.saveChaptersAsCBZ.get()) {
+                cache.addChapter("$chapterDirname.cbz", mangaDir, download.manga)
+            }
 
             if (!isRemote) DiskUtil.createNoMediaFile(tmpDir, context)
 
@@ -891,3 +893,4 @@ class Downloader(
 
 // Arbitrary minimum required space to start a download: 200 MB
 private const val MIN_DISK_SPACE = 200L * 1024 * 1024
+
