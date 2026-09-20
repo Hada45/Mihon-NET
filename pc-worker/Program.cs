@@ -129,9 +129,9 @@ namespace MihonPcWorker
             app.MapPost("/api/v2/config/storage", (SetStorageRequest req) =>
             {
                 var newPath = req.StorageRoot?.Trim() ?? "";
-                if (string.IsNullOrWhiteSpace(newPath))
+                if (string.IsNullOrWhiteSpace(newPath) || newPath == "/" || newPath == "\\" || newPath.StartsWith("Belum diatur", StringComparison.OrdinalIgnoreCase))
                 {
-                    return Results.Json(new ErrorResponse("storageRoot cannot be empty"), statusCode: StatusCodes.Status400BadRequest);
+                    return Results.Json(new { success = true, storageRoot = config.StorageRoot, message = "Ignored placeholder storage path" });
                 }
 
                 try

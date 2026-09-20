@@ -92,12 +92,17 @@ class DownloadNotifier(
                 )
             }
 
-            val downloadingProgressText = context.stringResource(
-                MR.strings.chapter_downloading_progress,
-                download.downloadedImages,
-                download.pages!!.size,
-            )
-
+            val pages = download.pages
+            val totalPages = pages?.size ?: 0
+            val downloadingProgressText = if (totalPages > 0) {
+                context.stringResource(
+                    MR.strings.chapter_downloading_progress,
+                    download.downloadedImages,
+                    totalPages,
+                )
+            } else {
+                context.stringResource(MR.strings.ext_downloading)
+            }
             if (preferences.hideNotificationContent.get()) {
                 setContentTitle(downloadingProgressText)
                 setContentText(null)
@@ -112,7 +117,11 @@ class DownloadNotifier(
                 setContentText(downloadingProgressText)
             }
 
-            setProgress(download.pages!!.size, download.downloadedImages, false)
+            if (totalPages > 0) {
+                setProgress(totalPages, download.downloadedImages, false)
+            } else {
+                setProgress(0, 0, true)
+            }
             setOngoing(true)
 
             show(Notifications.ID_DOWNLOAD_CHAPTER_PROGRESS)

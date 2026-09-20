@@ -74,9 +74,11 @@ namespace MihonPcWorker
         public string GetDownloadsDir()
         {
             var root = StorageRoot.Trim();
-            if (string.IsNullOrEmpty(root))
+            if (string.IsNullOrEmpty(root) || root == "/" || root == "\\")
             {
-                return "";
+                if (Directory.Exists(@"J:\Mihon")) return @"J:\Mihon";
+                if (Directory.Exists(@"J:\")) return @"J:\Manga";
+                return Path.Combine(AppContext.BaseDirectory, "Manga");
             }
             if (!Directory.Exists(root))
             {

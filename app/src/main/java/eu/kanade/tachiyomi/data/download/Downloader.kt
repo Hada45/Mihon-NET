@@ -276,8 +276,6 @@ class Downloader(
     suspend fun queueChapters(manga: Manga, chapters: List<Chapter>, autoStart: Boolean, isWorker: Boolean = downloadPreferences.downloadWorkerEnabled.get()) {
         if (chapters.isEmpty()) return
 
-        if (downloadPreferences.isRemoteStorage()) cache.awaitRemoteIndex()
-
         val source = sourceManager.get(manga.source) as? HttpSource ?: return
         val wasEmpty = queueState.value.isEmpty()
         val chaptersToQueue = chapters.asSequence()
@@ -339,7 +337,6 @@ class Downloader(
             }
 
             download.status = Download.State.DOWNLOADING
-            notifier.onProgressChange(download)
 
             val (ref, resolvedPages) = stbDownloadClient.enqueue(
                 download.manga,
@@ -349,6 +346,7 @@ class Downloader(
             )
             jobRef = ref
             download.pages = resolvedPages
+            notifier.onProgressChange(download)
 
             stbDownloadClient.awaitCompletion(
                 ref = ref,
@@ -456,7 +454,17 @@ class Downloader(
             download.chapter.scanlator,
             download.chapter.url,
         )
-        val tmpDir = mangaDir.createDirectory(chapterDirname + TMP_DIR_SUFFIX)!!
+        val tmpDir = mangaDir.createDirectory(chapterDirname + TMP_DIR_SUFFIX)
+            ?: run {
+                download.status = Download.State.ERROR
+                notifier.onError(
+                    context.stringResource(MR.strings.storage_failed_to_create_directory, chapterDirname),
+                    download.chapter.name,
+                    download.manga.title,
+                    download.manga.id,
+                )
+                return
+            }
 
         try {
             // If the page list already exists, start from the file
@@ -474,6 +482,7 @@ class Downloader(
             }
 
             download.status = Download.State.DOWNLOADING
+            notifier.onProgressChange(download)
 
             // Start downloading images, consider we can have downloaded images already
             pageList.asFlow().flatMapMerge(concurrency = downloadPreferences.parallelPageLimit.get()) { page ->

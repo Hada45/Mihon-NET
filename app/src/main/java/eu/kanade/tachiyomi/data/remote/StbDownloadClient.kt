@@ -36,10 +36,18 @@ class StbDownloadClient(
 
     data class JobRef(val id: String, val server: Server)
 
+    private fun isValidCustomStoragePath(path: String): Boolean {
+        val trimmed = path.trim()
+        return trimmed.isNotBlank() &&
+            trimmed != "/" &&
+            trimmed != "\\" &&
+            !trimmed.startsWith("Belum diatur", ignoreCase = true)
+    }
+
     suspend fun testConnection(): String {
         val server = servers().firstOrNull() ?: throw IOException("No Download Worker configured")
         val targetPath = preferences.stbWorkerStoragePath.get().trim()
-        if (targetPath.isNotBlank()) {
+        if (isValidCustomStoragePath(targetPath)) {
             runCatching {
                 post(server, "/api/v2/config/storage", JSONObject().put("storageRoot", targetPath))
             }
@@ -112,7 +120,7 @@ class StbDownloadClient(
     ): Pair<JobRef, List<Page>> {
         val server = selectServer()
         val targetPath = preferences.stbWorkerStoragePath.get().trim()
-        if (targetPath.isNotBlank()) {
+        if (isValidCustomStoragePath(targetPath)) {
             runCatching {
                 post(server, "/api/v2/config/storage", JSONObject().put("storageRoot", targetPath))
             }
