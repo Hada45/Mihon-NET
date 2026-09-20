@@ -15,3 +15,9 @@ local.properties
 
 # macOS specific files
 .DS_Store
+
+# Local logs
+*.log
+replay_*.log
+smb_log*.txt
+

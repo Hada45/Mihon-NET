@@ -1,86 +1,49 @@
-<div align="center">
+# Mihon Net 🚀
+### Next-Gen Manga Reader with High-Performance SMB & Network Streaming
 
-<a href="https://mihon.app">
-    <img src="./.github/assets/logo.png" alt="Mihon logo" title="Mihon logo" width="80"/>
-</a>
+**Mihon Net** adalah fork pengembangan khusus dari [Mihon](https://github.com/mihonapp/mihon) yang menghadirkan kemampuan **SMB (Windows Share / Samba) & Network Streaming langsung**, memungkinkan Anda membaca koleksi manga/komik yang tersimpan di PC atau NAS tanpa perlu mengunduh seluruh bab ke penyimpanan HP terlebih dahulu.
 
-# Mihon [App](#)
+---
 
-### Full-featured reader
-Discover and read manga, webtoons, comics, and more – easier than ever on your Android device.
+## ✨ Fitur Unggulan (Key Features)
 
-[![Discord server](https://img.shields.io/discord/1195734228319617024.svg?label=&labelColor=6A7EC2&color=7389D8&logo=discord&logoColor=FFFFFF)](https://discord.gg/mihon)
-[![GitHub downloads](https://img.shields.io/github/downloads/mihonapp/mihon/total?label=downloads&labelColor=27303D&color=0D1117&logo=github&logoColor=FFFFFF&style=flat)](https://mihon.app/download)
+### ⚡ SMB Direct Archive Streaming (Fast-Path CBZ/ZIP)
+- **Instan Buka Bab (<150ms)**: Menggunakan pembaca *Central Directory* cerdas yang hanya membaca metadata ujung file `.cbz` / `.zip` di server. Tidak perlu mengunduh seluruh arsip untuk mulai membaca.
+- **Dedicated Metadata Channel**: Jalur pembacaan struktur folder dan arsip (`metaShare`) dipisahkan total dari jalur streaming gambar, memastikan pembukaan bab selalu mulus dan tidak pernah terhambat oleh unduhan gambar yang sedang berlangsung.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/mihonapp/mihon/build.yml?labelColor=27303D)](https://github.com/mihonapp/mihon/actions/workflows/build_push.yml)
-[![License: Apache-2.0](https://img.shields.io/github/license/mihonapp/mihon?labelColor=27303D&color=0877d2)](/LICENSE)
-[![Translation status](https://img.shields.io/weblate/progress/mihon?labelColor=27303D&color=946300)](https://hosted.weblate.org/engage/mihon/)
+### 🛡️ Windows SMB Server Friendly (Anti Rate-Limiter)
+- **Singleton SMB Engine**: Mencegah kebocoran soket TCP, thread pool, dan event loop internal.
+- **Bounded Connection Pool (`Semaphore(2)`)**: Membatasi koneksi konkuren agar tidak memicu fitur keamanan *Auth Rate Limiter* pada Windows Server / Windows 11 SMB (`EnableAuthRateLimiter: True`).
 
-## Download
+### 📊 Built-in Realtime SMB Performance Profiler
+- Dilengkapi dengan sistem pencatatan performa terintegrasi (`SmbPerfLogger`) yang melacak durasi buka bab, waktu latensi pemuatan halaman, dan kecepatan transfer jaringan secara riil (MB/s).
+- Akses log kapan saja langsung dari HP melalui menu:
+  **Pengaturan ➔ Lanjutan ➔ Log Performa SMB** untuk menyalin atau membagikan riwayat metrik.
 
-[![Mihon Stable](https://img.shields.io/github/release/mihonapp/mihon.svg?maxAge=3600&label=Stable&labelColor=06599d&color=043b69)](https://mihon.app/download)
-[![Mihon Beta](https://img.shields.io/github/v/release/mihonapp/mihon-preview.svg?maxAge=3600&label=Beta&labelColor=2c2c47&color=1c1c39)](https://mihon.app/download)
+### 💾 Dual-Tier Caching System
+- **Memory + Disk Cache**: Halaman yang telah dibaca disimpan secara lokal sehingga navigasi bolak-balik antar halaman berjalan instan (**0 ms**).
 
-*Requires Android 8.0 or higher.*
+---
 
-## Features
+## 📥 Unduh / Download APK
 
-<div align="left">
+Dapatkan file APK siap pasang pada menu [Releases](../../releases):
+- **ARM64-v8a (Direkomendasikan)**: Untuk ponsel modern (Snapdragon, Dimensity, Exynos 64-bit).
+- **Universal**: Untuk kompatibilitas perangkat lama atau emulator.
 
-* Local reading of content.
-* A configurable reader with multiple viewers, reading directions and other settings.
-* Tracker support: [MangaBaka](https://mangabaka.org), [MyAnimeList](https://myanimelist.net/), [AniList](https://anilist.co/), [Kitsu](https://kitsu.app/), [MangaUpdates](https://mangaupdates.com), [Shikimori](https://shikimori.one), [Bangumi](https://bgm.tv/), and [Hikka](https://hikka.io/) support.
-* Categories to organize your library.
-* Light and dark themes.
-* Schedule updating your library for new chapters.
-* Create backups locally to read offline or to your desired cloud service.
-* Plus much more...
+---
 
-</div>
+## 🛠️ Cara Penggunaan (Setup Windows Share)
 
-## Contributing
+1. **Di PC Windows**:
+   - Bagikan folder koleksi komik/manga Anda (*Klik kanan folder ➔ Properties ➔ Sharing ➔ Advanced Sharing ➔ Berikan izin akses*).
+2. **Di Aplikasi Mihon Net**:
+   - Buka **Pengaturan ➔ Data dan Penyimpanan ➔ Penyimpanan Jaringan (SMB)**.
+   - Masukkan IP PC Anda (misal: `192.168.1.x`), Port `445`, nama Share, serta username & password PC jika ada.
+   - Selesai! Buka tab Library Anda dan manga di server PC Anda akan langsung dapat dibaca seketika.
 
-[Code of conduct](./CODE_OF_CONDUCT.md) · [Contributing guide](./CONTRIBUTING.md)
+---
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+## 📜 Lisensi & Atribusi
 
-Before reporting a new issue, take a look at the [FAQ](https://mihon.app/docs/faq/general), the [changelog](https://mihon.app/changelogs/) and the already opened [issues](https://github.com/mihonapp/mihon/issues); if you got any questions, join our [Discord server](https://discord.gg/mihon).
-
-
-### Repositories
-
-[![mihonapp/website - GitHub](https://github-stats-extended.vercel.app/api/pin/?username=mihonapp&repo=website&bg_color=161B22&text_color=c9d1d9&title_color=0877d2&icon_color=0877d2&border_radius=8&hide_border=true&description_lines_count=2)](https://github.com/mihonapp/website/)
-[![mihonapp/bitmap.kt - GitHub](https://github-stats-extended.vercel.app/api/pin/?username=mihonapp&repo=bitmap.kt&bg_color=161B22&text_color=c9d1d9&title_color=0877d2&icon_color=0877d2&border_radius=8&hide_border=true&description_lines_count=2)](https://github.com/mihonapp/bitmap.kt/)
-
-### Credits
-
-Thank you to all the people who have contributed!
-
-<a href="https://github.com/mihonapp/mihon/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=mihonapp/mihon" alt="Mihon app contributors" title="Mihon app contributors" width="800"/>
-</a>
-
-### Disclaimer
-
-The developer(s) of this application does not have any affiliation with the content providers available, and this application hosts zero content.
-
-### License
-
-<pre>
-Copyright © 2015 Javier Tomás
-Copyright © 2024 Mihon Open Source Project
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-</pre>
-
-</div>
+Proyek ini dibangun di atas basis kode [Mihon](https://github.com/mihonapp/mihon) di bawah lisensi [Apache 2.0](LICENSE).

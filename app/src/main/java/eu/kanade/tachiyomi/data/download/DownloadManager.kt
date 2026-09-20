@@ -1,10 +1,13 @@
-package eu.kanade.tachiyomi.data.download
+﻿package eu.kanade.tachiyomi.data.download
 
 import android.content.Context
+import com.hippo.unifile.UniFile
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.data.download.model.Download
+import eu.kanade.tachiyomi.data.ftp.FtpDownloadStorage
+import eu.kanade.tachiyomi.data.smb.SmbDownloadStorage
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -16,6 +19,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
@@ -104,10 +108,13 @@ class DownloadManager(
         return queueState.value.find { it.chapter.id == chapterId }
     }
 
-    fun startDownloadNow(chapterId: Long) {
+    fun startDownloadNow(chapterId: Long, isWorker: Boolean = downloadPreferences.downloadWorkerEnabled.get()) {
         val existingDownload = getQueuedDownloadOrNull(chapterId)
         // If not in queue try to start a new download
-        val toAdd = existingDownload ?: runBlocking { downloadFromChapterId(chapterId) } ?: return
+        val toAdd = existingDownload ?: runBlocking { downloadFromChapterId(chapterId) }?.apply {
+            this.isWorker = isWorker
+        } ?: return
+        if (isWorker) toAdd.isWorker = true
         queueState.value.toMutableList().apply {
             existingDownload?.let { remove(it) }
             add(0, toAdd)
@@ -140,8 +147,8 @@ class DownloadManager(
      * @param chapters the list of chapters to enqueue.
      * @param autoStart whether to start the downloader after enqueing the chapters.
      */
-    suspend fun downloadChapters(manga: Manga, chapters: List<Chapter>, autoStart: Boolean = true) {
-        downloader.queueChapters(manga, chapters, autoStart)
+    suspend fun downloadChapters(manga: Manga, chapters: List<Chapter>, autoStart: Boolean = true, isWorker: Boolean = downloadPreferences.downloadWorkerEnabled.get()) {
+        downloader.queueChapters(manga, chapters, autoStart, isWorker)
     }
 
     /**
@@ -189,6 +196,16 @@ class DownloadManager(
      * @param mangaTitle the title of the manga to query.
      * @param sourceId the id of the source of the chapter.
      */
+    fun findExistingChapterDirName(
+        chapterName: String,
+        chapterScanlator: String?,
+        chapterUrl: String,
+        mangaTitle: String,
+        sourceId: Long,
+    ): String? {
+        return cache.findExistingChapterDirName(chapterName, chapterScanlator, chapterUrl, mangaTitle, sourceId)
+    }
+
     fun isChapterDownloaded(
         chapterName: String,
         chapterScanlator: String?,
@@ -214,8 +231,15 @@ class DownloadManager(
         mangaTitle: String,
         source: Source,
     ): Boolean {
-        return provider.findChapterDir(chapterName, chapterScanlator, chapterUrl, mangaTitle, source) != null
+        return if (downloadPreferences.isRemoteStorage()) {
+            cache.isChapterDownloaded(chapterName, chapterScanlator, chapterUrl, mangaTitle, source.id)
+        } else {
+            provider.findChapterDir(chapterName, chapterScanlator, chapterUrl, mangaTitle, source) != null
+        }
     }
+
+    suspend fun awaitRemoteIndex() = cache.awaitRemoteIndex()
+    suspend fun awaitFtpIndex() = awaitRemoteIndex()
 
     /**
      * Returns the amount of downloaded chapters.
@@ -253,6 +277,43 @@ class DownloadManager(
 
             removeFromDownloadQueue(filteredChapters)
 
+            if (downloadPreferences.isSmbStorage()) {
+                try {
+                    val config = SmbDownloadStorage.config(downloadPreferences)
+                    val sourceName = provider.getSourceDirName(source)
+                    val mangaName = provider.getMangaDirName(manga.title)
+                    filteredChapters.forEach { chapter ->
+                        provider.getValidChapterDirNames(chapter.name, chapter.scanlator, chapter.url).forEach { name ->
+                            SmbDownloadStorage.deleteChapter(config, sourceName, mangaName, name)
+                        }
+                    }
+                    cache.removeChapters(filteredChapters, manga)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to delete chapters from SMB storage" }
+                }
+                return@launchIO
+            }
+            if (downloadPreferences.isFtpStorage()) {
+                try {
+                    val config = FtpDownloadStorage.config(downloadPreferences)
+                    val sourceName = provider.getSourceDirName(source)
+                    val mangaName = provider.getMangaDirName(manga.title)
+                    filteredChapters.forEach { chapter ->
+                        provider.getValidChapterDirNames(chapter.name, chapter.scanlator, chapter.url).forEach { name ->
+                            FtpDownloadStorage.deleteChapter(config, sourceName, mangaName, name)
+                        }
+                    }
+                    cache.removeChapters(filteredChapters, manga)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to delete chapters from FTP storage" }
+                }
+                return@launchIO
+            }
+
             val (mangaDir, chapterDirs) = provider.findChapterDirs(filteredChapters, manga, source)
             chapterDirs.forEach { it.delete() }
             cache.removeChapters(filteredChapters, manga)
@@ -275,6 +336,36 @@ class DownloadManager(
         launchIO {
             if (removeQueued) {
                 downloader.removeFromQueue(manga)
+            }
+            if (downloadPreferences.isSmbStorage()) {
+                try {
+                    SmbDownloadStorage.deleteManga(
+                        SmbDownloadStorage.config(downloadPreferences),
+                        provider.getSourceDirName(source),
+                        provider.getMangaDirName(manga.title),
+                    )
+                    cache.removeManga(manga)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to delete manga from SMB storage" }
+                }
+                return@launchIO
+            }
+            if (downloadPreferences.isFtpStorage()) {
+                try {
+                    FtpDownloadStorage.deleteManga(
+                        FtpDownloadStorage.config(downloadPreferences),
+                        provider.getSourceDirName(source),
+                        provider.getMangaDirName(manga.title),
+                    )
+                    cache.removeManga(manga)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to delete manga from FTP storage" }
+                }
+                return@launchIO
             }
             provider.findMangaDir(manga.title, source)?.delete()
             cache.removeManga(manga)
@@ -333,9 +424,45 @@ class DownloadManager(
      * @param newSource the new source.
      */
     fun renameSource(oldSource: Source, newSource: Source) {
-        val oldFolder = provider.findSourceDir(oldSource) ?: return
+        val oldName = provider.getSourceDirName(oldSource)
         val newName = provider.getSourceDirName(newSource)
+        if (oldName == newName) return
 
+        if (downloadPreferences.isSmbStorage()) {
+            launchIO {
+                try {
+                    val renamed = SmbDownloadStorage.renameSource(
+                        SmbDownloadStorage.config(downloadPreferences),
+                        oldName,
+                        newName,
+                    )
+                    if (renamed) cache.invalidateCache()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to rename SMB source download folder" }
+                }
+            }
+            return
+        }
+        if (downloadPreferences.isFtpStorage()) {
+            launchIO {
+                try {
+                    val renamed = FtpDownloadStorage.renameSource(
+                        FtpDownloadStorage.config(downloadPreferences),
+                        oldName,
+                        newName,
+                    )
+                    if (renamed) cache.invalidateCache()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to rename FTP source download folder" }
+                }
+            }
+            return
+        }
+        val oldFolder = provider.findSourceDir(oldSource) ?: return
         if (oldFolder.name == newName) return
 
         val capitalizationChanged = oldFolder.name.equals(newName, ignoreCase = true)
@@ -360,6 +487,40 @@ class DownloadManager(
      */
     suspend fun renameManga(manga: Manga, newTitle: String) {
         val source = sourceManager.getOrStub(manga.source)
+        if (downloadPreferences.isSmbStorage()) {
+            try {
+                if (SmbDownloadStorage.renameManga(
+                        SmbDownloadStorage.config(downloadPreferences),
+                        provider.getSourceDirName(source),
+                        provider.getMangaDirName(manga.title),
+                        provider.getMangaDirName(newTitle),
+                    )) {
+                    cache.renameManga(manga, null, newTitle)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to rename manga in SMB storage" }
+            }
+            return
+        }
+        if (downloadPreferences.isFtpStorage()) {
+            try {
+                if (FtpDownloadStorage.renameManga(
+                        FtpDownloadStorage.config(downloadPreferences),
+                        provider.getSourceDirName(source),
+                        provider.getMangaDirName(manga.title),
+                        provider.getMangaDirName(newTitle),
+                    )) {
+                    cache.renameManga(manga, null, newTitle)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to rename manga in FTP storage" }
+            }
+            return
+        }
         val oldFolder = provider.findMangaDir(manga.title, source) ?: return
         val newName = provider.getMangaDirName(newTitle)
 
@@ -394,6 +555,46 @@ class DownloadManager(
      */
     suspend fun renameChapter(source: Source, manga: Manga, oldChapter: Chapter, newChapter: Chapter) {
         val oldNames = provider.getValidChapterDirNames(oldChapter.name, oldChapter.scanlator, oldChapter.url)
+        if (downloadPreferences.isSmbStorage()) {
+            val newName = provider.getChapterDirName(newChapter.name, newChapter.scanlator, newChapter.url)
+            try {
+                if (SmbDownloadStorage.renameChapter(
+                        SmbDownloadStorage.config(downloadPreferences),
+                        provider.getSourceDirName(source),
+                        provider.getMangaDirName(manga.title),
+                        oldNames,
+                        newName,
+                    )) {
+                    cache.removeChapter(oldChapter, manga)
+                    cache.addChapter(newName, UniFile.fromFile(context.cacheDir)!!, manga)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to rename chapter in SMB storage" }
+            }
+            return
+        }
+        if (downloadPreferences.isFtpStorage()) {
+            val newName = provider.getChapterDirName(newChapter.name, newChapter.scanlator, newChapter.url)
+            try {
+                if (FtpDownloadStorage.renameChapter(
+                        FtpDownloadStorage.config(downloadPreferences),
+                        provider.getSourceDirName(source),
+                        provider.getMangaDirName(manga.title),
+                        oldNames,
+                        newName,
+                    )) {
+                    cache.removeChapter(oldChapter, manga)
+                    cache.addChapter(newName, UniFile.fromFile(context.cacheDir)!!, manga)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to rename chapter in FTP storage" }
+            }
+            return
+        }
         val mangaDir = provider.getMangaDir(manga.title, source).getOrElse { e ->
             logcat(LogPriority.ERROR, e) { "Manga download folder doesn't exist. Skipping renaming after source sync" }
             return

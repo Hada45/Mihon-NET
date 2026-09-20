@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.data.download
+﻿package eu.kanade.tachiyomi.data.download
 
 import android.content.Context
 import androidx.core.net.toUri
@@ -7,6 +7,8 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.data.ftp.FtpDownloadStorage
+import eu.kanade.tachiyomi.data.smb.SmbDownloadStorage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +21,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
@@ -46,6 +50,7 @@ import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.storage.service.StorageManager
@@ -68,6 +73,7 @@ class DownloadCache(
     private val provider: DownloadProvider,
     private val sourceManager: SourceManager,
     private val storageManager: StorageManager,
+    private val downloadPreferences: DownloadPreferences,
 ) {
 
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -95,33 +101,51 @@ class DownloadCache(
         .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     private val diskCacheFile: File
-        get() = File(context.cacheDir, "dl_index_cache_v3")
+        get() = File(context.cacheDir, if (downloadPreferences.isSmbStorage()) "dl_index_cache_smb_v1" else if (downloadPreferences.isFtpStorage()) "dl_index_cache_ftp_v1" else "dl_index_cache_v3")
 
     private val rootDownloadsDirMutex = Mutex()
     private var rootDownloadsDir = RootDirectory(storageManager.getDownloadsDirectory())
 
-    init {
-        // Attempt to read cache file
-        scope.launch {
-            rootDownloadsDirMutex.withLock {
-                try {
-                    if (diskCacheFile.exists()) {
-                        val diskCache = diskCacheFile.inputStream().use {
-                            ProtoBuf.decodeFromByteArray<RootDirectory>(it.readBytes())
-                        }
-                        rootDownloadsDir = diskCache
-                        lastRenew = System.currentTimeMillis()
+    private val initDiskCacheJob = scope.launch {
+        rootDownloadsDirMutex.withLock {
+            try {
+                if (diskCacheFile.exists()) {
+                    val diskCache = diskCacheFile.inputStream().use {
+                        ProtoBuf.decodeFromByteArray<RootDirectory>(it.readBytes())
                     }
-                } catch (e: Throwable) {
-                    logcat(LogPriority.ERROR, e) { "Failed to initialize from disk cache" }
-                    diskCacheFile.delete()
+                    if ((diskCache.dir == null) != downloadPreferences.isRemoteStorage()) return@withLock
+                    rootDownloadsDir = diskCache
+                    lastRenew = System.currentTimeMillis()
                 }
+            } catch (e: Throwable) {
+                logcat(LogPriority.ERROR, e) { "Failed to initialize from disk cache" }
+                diskCacheFile.delete()
             }
         }
+    }
 
+    init {
         storageManager.changes
             .onEach { invalidateCache() }
             .launchIn(scope)
+
+        listOf(
+            downloadPreferences.ftpDownloadLocation,
+            downloadPreferences.ftpHost,
+            downloadPreferences.ftpPort,
+            downloadPreferences.ftpPath,
+            downloadPreferences.downloadStorageType,
+            downloadPreferences.smbHost,
+            downloadPreferences.smbPort,
+            downloadPreferences.smbShareName,
+            downloadPreferences.smbPath,
+        ).forEach { pref ->
+            pref.changes()
+                .drop(1)
+                .distinctUntilChanged()
+                .onEach { invalidateCache() }
+                .launchIn(scope)
+        }
     }
 
     /**
@@ -133,6 +157,22 @@ class DownloadCache(
      * @param mangaTitle the title of the manga to query.
      * @param sourceId the id of the source of the chapter.
      */
+    fun findExistingChapterDirName(
+        chapterName: String,
+        chapterScanlator: String?,
+        chapterUrl: String,
+        mangaTitle: String,
+        sourceId: Long,
+    ): String? {
+        renewCache()
+        val sourceDir = rootDownloadsDir.sourceDirs[sourceId] ?: return null
+        val mangaDir = sourceDir.mangaDirs[provider.getMangaDirName(mangaTitle)] ?: return null
+        val validNames = provider.getValidChapterDirNames(chapterName, chapterScanlator, chapterUrl)
+        return validNames.firstOrNull { it in mangaDir.chapterDirs }
+            ?: validNames.firstOrNull { it.removeSuffix(".cbz") in mangaDir.chapterDirs }
+            ?: validNames.firstOrNull { it.removeSuffix(".zip") in mangaDir.chapterDirs }
+    }
+
     fun isChapterDownloaded(
         chapterName: String,
         chapterScanlator: String?,
@@ -196,6 +236,17 @@ class DownloadCache(
      */
     suspend fun addChapter(chapterDirName: String, mangaUniFile: UniFile, manga: Manga) {
         rootDownloadsDirMutex.withLock {
+            if (downloadPreferences.isRemoteStorage()) {
+                val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: SourceDirectory(null).also {
+                    rootDownloadsDir.sourceDirs += manga.source to it
+                }
+                val mangaName = provider.getMangaDirName(manga.title)
+                val mangaDir = sourceDir.mangaDirs[mangaName] ?: MangaDirectory(null).also {
+                    sourceDir.mangaDirs += mangaName to it
+                }
+                mangaDir.chapterDirs += chapterDirName
+                return@withLock
+            }
             // Retrieve the cached source directory or cache a new one
             var sourceDir = rootDownloadsDir.sourceDirs[manga.source]
             if (sourceDir == null) {
@@ -286,7 +337,7 @@ class DownloadCache(
      * @param mangaUniFile the manga's new directory.
      * @param newTitle the manga's new title.
      */
-    suspend fun renameManga(manga: Manga, mangaUniFile: UniFile, newTitle: String) {
+    suspend fun renameManga(manga: Manga, mangaUniFile: UniFile?, newTitle: String) {
         rootDownloadsDirMutex.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
             val oldMangaDirName = provider.getMangaDirName(manga.title)
@@ -329,6 +380,14 @@ class DownloadCache(
         renewCache()
     }
 
+    suspend fun awaitRemoteIndex() {
+        if (!downloadPreferences.isRemoteStorage()) return
+        renewCache()
+        renewalJob?.join()
+    }
+
+    suspend fun awaitFtpIndex() = awaitRemoteIndex()
+
     /**
      * Renews the downloads cache.
      */
@@ -339,63 +398,100 @@ class DownloadCache(
         }
 
         renewalJob = scope.launchIO {
-            if (lastRenew == 0L) {
-                _isInitializing.emit(true)
+            initDiskCacheJob.join()
+            if (lastRenew + renewInterval >= System.currentTimeMillis()) {
+                return@launchIO
             }
 
-            // Try to wait until extensions and sources have loaded
-            var sources = emptyList<Source>()
-            withTimeoutOrNull(30.seconds) {
-                sources = getSources()
-            }
+            try {
+                if (lastRenew == 0L) {
+                    _isInitializing.emit(true)
+                }
 
-            val sourceMap = sources.associate { provider.getSourceDirName(it).lowercase() to it.id }
+                // Try to wait until extensions and sources have loaded
+                var sources = emptyList<Source>()
+                withTimeoutOrNull(30.seconds) {
+                    sources = getSources()
+                }
 
-            rootDownloadsDirMutex.withLock {
-                val updatedRootDir = RootDirectory(storageManager.getDownloadsDirectory())
+                val sourceMap = sources.associate { provider.getSourceDirName(it).lowercase() to it.id }
 
-                updatedRootDir.sourceDirs = updatedRootDir.dir?.listFiles().orEmpty()
-                    .filter { it.isDirectory && !it.name.isNullOrBlank() }
-                    .mapNotNull { dir ->
-                        val sourceId = sourceMap[dir.name!!.lowercase()]
-                        sourceId?.let { it to SourceDirectory(dir) }
+                rootDownloadsDirMutex.withLock {
+                    val isFtp = downloadPreferences.isFtpStorage()
+                    val isSmb = downloadPreferences.isSmbStorage()
+                    val useRemote = isFtp || isSmb
+                    val updatedRootDir = RootDirectory(if (useRemote) null else storageManager.getDownloadsDirectory())
+
+                    if (useRemote) {
+                        val remote = try {
+                            if (isSmb) {
+                                val config = SmbDownloadStorage.config(downloadPreferences)
+                                SmbDownloadStorage.listDownloads(config, allowedSources = sourceMap.keys)
+                            } else {
+                                val config = FtpDownloadStorage.config(downloadPreferences)
+                                FtpDownloadStorage.listDownloads(config, allowedSources = sourceMap.keys)
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            logcat(LogPriority.ERROR, e) { "DownloadCache: failed to refresh remote index" }
+                            return@withLock
+                        }
+                        updatedRootDir.sourceDirs = remote.mapNotNull { (sourceName, mangas) ->
+                            val sourceId = sourceMap[sourceName.lowercase()] ?: return@mapNotNull null
+                            sourceId to SourceDirectory(
+                                null,
+                                mangas.mapValues { (_, chapters) -> MangaDirectory(null, chapters.toMutableSet()) },
+                            )
+                        }.toMap()
+                        rootDownloadsDir = updatedRootDir
+                        return@withLock
                     }
-                    .toMap()
 
-                updatedRootDir.sourceDirs.values.map { sourceDir ->
-                    async {
-                        sourceDir.mangaDirs = sourceDir.dir?.listFiles().orEmpty()
-                            .filter { it.isDirectory && !it.name.isNullOrBlank() }
-                            .associate { it.name!! to MangaDirectory(it) }
+                    updatedRootDir.sourceDirs = updatedRootDir.dir?.listFiles().orEmpty()
+                        .filter { it.isDirectory && !it.name.isNullOrBlank() }
+                        .mapNotNull { dir ->
+                            val sourceId = sourceMap[dir.name!!.lowercase()]
+                            sourceId?.let { it to SourceDirectory(dir) }
+                        }
+                        .toMap()
 
-                        sourceDir.mangaDirs.values.forEach { mangaDir ->
-                            val chapterDirs = mangaDir.dir?.listFiles().orEmpty()
-                                .mapNotNull {
-                                    when {
-                                        // Ignore incomplete downloads
-                                        it.name?.endsWith(Downloader.TMP_DIR_SUFFIX) == true -> null
-                                        // Folder of images
-                                        it.isDirectory -> it.name
-                                        // CBZ files
-                                        it.isFile && it.extension == "cbz" -> it.nameWithoutExtension
-                                        // Anything else is irrelevant
-                                        else -> null
+                    updatedRootDir.sourceDirs.values.map { sourceDir ->
+                        async {
+                            sourceDir.mangaDirs = sourceDir.dir?.listFiles().orEmpty()
+                                .filter { it.isDirectory && !it.name.isNullOrBlank() }
+                                .associate { it.name!! to MangaDirectory(it) }
+
+                            sourceDir.mangaDirs.values.forEach { mangaDir ->
+                                val chapterDirs = mangaDir.dir?.listFiles().orEmpty()
+                                    .mapNotNull {
+                                        when {
+                                            // Ignore incomplete downloads
+                                            it.name?.endsWith(Downloader.TMP_DIR_SUFFIX) == true -> null
+                                            // Folder of images
+                                            it.isDirectory -> it.name
+                                            // CBZ files
+                                            it.isFile && it.extension == "cbz" -> it.nameWithoutExtension
+                                            // Anything else is irrelevant
+                                            else -> null
+                                        }
                                     }
-                                }
-                                .toMutableSet()
+                                    .toMutableSet()
 
-                            mangaDir.chapterDirs = chapterDirs
+                                mangaDir.chapterDirs = chapterDirs
+                            }
                         }
                     }
+                        .awaitAll()
+
+                    rootDownloadsDir = updatedRootDir
                 }
-                    .awaitAll()
-
-                rootDownloadsDir = updatedRootDir
+            } finally {
+                _isInitializing.emit(false)
             }
-
-            _isInitializing.emit(false)
         }.also {
             it.invokeOnCompletion(onCancelling = true) { exception ->
+                _isInitializing.tryEmit(false)
                 if (exception != null && exception !is CancellationException) {
                     logcat(LogPriority.ERROR, exception) { "DownloadCache: failed to create cache" }
                 }
@@ -474,18 +570,11 @@ private object UniFileAsStringSerializer : KSerializer<UniFile?> {
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("UniFile", PrimitiveKind.STRING)
 
     override fun serialize(encoder: Encoder, value: UniFile?) {
-        return if (value == null) {
-            encoder.encodeNull()
-        } else {
-            encoder.encodeString(value.uri.toString())
-        }
+        encoder.encodeString(value?.uri?.toString().orEmpty())
     }
 
     override fun deserialize(decoder: Decoder): UniFile? {
-        return if (decoder.decodeNotNullMark()) {
-            UniFile.fromUri(Injekt.get<Context>(), decoder.decodeString().toUri())
-        } else {
-            decoder.decodeNull()
-        }
+        val uri = decoder.decodeString()
+        return if (uri.isBlank()) null else UniFile.fromUri(Injekt.get<Context>(), uri.toUri())
     }
 }

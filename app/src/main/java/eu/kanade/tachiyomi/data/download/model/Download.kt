@@ -19,7 +19,17 @@ data class Download(
     val manga: Manga,
     val chapter: Chapter,
 ) {
+    var isWorker: Boolean = false
     var pages: List<Page>? = null
+
+    constructor(
+        source: HttpSource,
+        manga: Manga,
+        chapter: Chapter,
+        isWorker: Boolean,
+    ) : this(source, manga, chapter) {
+        this.isWorker = isWorker
+    }
 
     val totalProgress: Int
         get() = pages?.sumOf(Page::progress) ?: 0

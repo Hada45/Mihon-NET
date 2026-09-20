@@ -54,6 +54,7 @@ import tachiyomi.domain.manga.interactor.GetFavorites
 import tachiyomi.domain.manga.interactor.ResetViewerFlags
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.storage.service.StoragePreferences
+import eu.kanade.tachiyomi.data.remote.StbDownloadClient
 import tachiyomi.domain.track.interactor.InsertTrack
 
 @DependencyGraph(
@@ -96,6 +97,7 @@ interface AppGraph : ViewModelGraph {
     val crashLogUtil: CrashLogUtil
 
     val downloadManager: DownloadManager
+    val stbDownloadClient: StbDownloadClient
 
     val updateChecker: AppUpdateChecker
 

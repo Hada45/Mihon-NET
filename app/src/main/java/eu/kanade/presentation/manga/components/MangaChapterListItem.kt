@@ -1,5 +1,9 @@
 package eu.kanade.presentation.manga.components
 
+import androidx.compose.ui.platform.LocalContext
+import mihon.app.di.appGraph
+import tachiyomi.presentation.core.util.collectAsState
+
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -65,6 +69,8 @@ fun MangaChapterListItem(
     onChapterSwipe: (LibraryPreferences.ChapterSwipeAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val downloadWorkerEnabled by remember { context.appGraph.downloadPreferences.downloadWorkerEnabled }.collectAsState()
     val start = getSwipeAction(
         action = chapterSwipeStartAction,
         read = read,
@@ -173,6 +179,7 @@ fun MangaChapterListItem(
 
             ChapterDownloadIndicator(
                 enabled = downloadIndicatorEnabled,
+                remoteEnabled = downloadWorkerEnabled,
                 modifier = Modifier.padding(start = 4.dp),
                 downloadStateProvider = downloadStateProvider,
                 downloadProgressProvider = downloadProgressProvider,

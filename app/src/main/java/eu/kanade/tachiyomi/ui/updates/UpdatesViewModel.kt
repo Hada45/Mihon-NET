@@ -263,6 +263,7 @@ class UpdatesViewModel(
                 ChapterDownloadAction.DELETE -> {
                     deleteChapters(items)
                 }
+                ChapterDownloadAction.REMOTE -> downloadChapters(items, isWorker = true)
             }
             toggleAllSelection(false)
         }
@@ -313,7 +314,7 @@ class UpdatesViewModel(
      * Downloads the given list of chapters with the manager.
      * @param updatesItem the list of chapters to download.
      */
-    private fun downloadChapters(updatesItem: List<UpdatesItem>) {
+    private fun downloadChapters(updatesItem: List<UpdatesItem>, isWorker: Boolean? = null) {
         viewModelScope.launchNonCancellable {
             val groupedUpdates = updatesItem.groupBy { it.update.mangaId }.values
             for (updates in groupedUpdates) {
@@ -322,7 +323,11 @@ class UpdatesViewModel(
                 // Don't download if source isn't available
                 sourceManager.get(manga.source) ?: continue
                 val chapters = updates.mapNotNull { getChapter.await(it.update.chapterId) }
-                downloadManager.downloadChapters(manga, chapters)
+                if (isWorker != null) {
+                    downloadManager.downloadChapters(manga, chapters, isWorker = isWorker)
+                } else {
+                    downloadManager.downloadChapters(manga, chapters)
+                }
             }
         }
     }

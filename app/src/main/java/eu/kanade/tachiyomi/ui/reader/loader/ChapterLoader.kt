@@ -1,13 +1,17 @@
-package eu.kanade.tachiyomi.ui.reader.loader
+﻿package eu.kanade.tachiyomi.ui.reader.loader
 
 import android.content.Context
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.DownloadProvider
+import eu.kanade.tachiyomi.data.ftp.FtpDownloadStorage
+import eu.kanade.tachiyomi.data.smb.SmbDownloadStorage
+import eu.kanade.tachiyomi.ui.reader.loader.SmbDownloadPageLoader
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import mihon.core.archive.archiveReader
+import mihon.app.di.appGraph
 import mihon.core.archive.epubReader
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.withIOContext
@@ -77,8 +81,12 @@ class ChapterLoader(
     /**
      * Returns the page loader to use for this [chapter].
      */
-    private fun getPageLoader(chapter: ReaderChapter): PageLoader {
+    private suspend fun getPageLoader(chapter: ReaderChapter): PageLoader {
         val dbChapter = chapter.chapter
+        val downloadPreferences = context.appGraph.downloadPreferences
+        val isFtp = downloadPreferences.isFtpStorage()
+        val isSmb = downloadPreferences.isSmbStorage()
+        if (isFtp || isSmb) downloadManager.awaitRemoteIndex()
         val isDownloaded = downloadManager.isChapterDownloadedOnDisk(
             dbChapter.name,
             dbChapter.scanlator,
@@ -87,6 +95,44 @@ class ChapterLoader(
             source,
         )
         return when {
+            isDownloaded && isSmb -> {
+                val config = SmbDownloadStorage.config(downloadPreferences)
+                val chapterDirName = downloadManager.findExistingChapterDirName(
+                    dbChapter.name,
+                    dbChapter.scanlator,
+                    dbChapter.url,
+                    manga.title,
+                    source.id,
+                ) ?: downloadProvider.getChapterDirName(dbChapter.name, dbChapter.scanlator, dbChapter.url)
+                SmbDownloadPageLoader(
+                    config,
+                    SmbDownloadStorage.chapterPath(
+                        config,
+                        downloadProvider.getSourceDirName(source),
+                        downloadProvider.getMangaDirName(manga.title),
+                        chapterDirName,
+                    ),
+                )
+            }
+            isDownloaded && isFtp -> {
+                val config = FtpDownloadStorage.config(downloadPreferences)
+                val chapterDirName = downloadManager.findExistingChapterDirName(
+                    dbChapter.name,
+                    dbChapter.scanlator,
+                    dbChapter.url,
+                    manga.title,
+                    source.id,
+                ) ?: downloadProvider.getChapterDirName(dbChapter.name, dbChapter.scanlator, dbChapter.url)
+                FtpDownloadPageLoader(
+                    config,
+                    FtpDownloadStorage.chapterPath(
+                        config,
+                        downloadProvider.getSourceDirName(source),
+                        downloadProvider.getMangaDirName(manga.title),
+                        chapterDirName,
+                    ),
+                )
+            }
             isDownloaded -> DownloadPageLoader(
                 chapter,
                 manga,

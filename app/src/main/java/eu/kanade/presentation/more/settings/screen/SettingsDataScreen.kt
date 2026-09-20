@@ -67,6 +67,13 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.backup.service.BackupPreferences
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.storage.service.StoragePreferences
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import eu.kanade.tachiyomi.data.ftp.FtpDownloadStorage
+import eu.kanade.tachiyomi.data.smb.SmbDownloadStorage
+import eu.kanade.tachiyomi.data.remote.StbDownloadClient
+import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.TextButton
 import tachiyomi.presentation.core.i18n.stringResource
@@ -97,10 +104,18 @@ object SettingsDataScreen : SearchableSettings {
         val context = LocalContext.current
         val backupPreferences = remember { context.appGraph.backupPreferences }
         val storagePreferences = remember { context.appGraph.storagePreferences }
+        val downloadPreferences = remember { context.appGraph.downloadPreferences }
+        val stbClient = remember { context.appGraph.stbDownloadClient }
 
         return listOf(
-            getStorageLocationPref(storagePreferences = storagePreferences),
-            Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.pref_storage_location_info)),
+            getNetworkStorageGroup(
+                storagePreferences = storagePreferences,
+                downloadPreferences = downloadPreferences,
+            ),
+            getDownloadWorkerGroup(
+                downloadPreferences = downloadPreferences,
+                stbClient = stbClient,
+            ),
 
             getBackupAndRestoreGroup(backupPreferences = backupPreferences),
             getDataGroup(),
@@ -160,12 +175,13 @@ object SettingsDataScreen : SearchableSettings {
     @Composable
     private fun getStorageLocationPref(
         storagePreferences: StoragePreferences,
+        downloadPreferences: DownloadPreferences,
     ): Preference.PreferenceItem.TextPreference {
         val context = LocalContext.current
         val pickStorageLocation = storageLocationPicker(storagePreferences.baseStorageDirectory)
 
         return Preference.PreferenceItem.TextPreference(
-            title = stringResource(MR.strings.pref_storage_location),
+            title = stringResource(MR.strings.pref_storage_location_local_folder),
             subtitle = storageLocationText(storagePreferences.baseStorageDirectory),
             onClick = {
                 try {
@@ -174,6 +190,315 @@ object SettingsDataScreen : SearchableSettings {
                     context.toast(MR.strings.file_picker_error)
                 }
             },
+        )
+    }
+
+    @Composable
+    private fun getNetworkStorageGroup(
+        storagePreferences: StoragePreferences,
+        downloadPreferences: DownloadPreferences,
+    ): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+
+        val storageType by downloadPreferences.downloadStorageType.collectAsState()
+        val ftpSelected by downloadPreferences.ftpDownloadLocation.collectAsState()
+        val effectiveType = when {
+            storageType == "smb" -> "smb"
+            storageType == "ftp" || ftpSelected -> "ftp"
+            else -> "local"
+        }
+        val isSmb = effectiveType == "smb"
+        val isFtp = effectiveType == "ftp"
+
+        val ftpHost by downloadPreferences.ftpHost.collectAsState()
+        val ftpPort by downloadPreferences.ftpPort.collectAsState()
+        val ftpPath by downloadPreferences.ftpPath.collectAsState()
+        val smbHost by downloadPreferences.smbHost.collectAsState()
+        val smbPort by downloadPreferences.smbPort.collectAsState()
+        val smbShareName by downloadPreferences.smbShareName.collectAsState()
+        val smbUsername by downloadPreferences.smbUsername.collectAsState()
+        val smbDomain by downloadPreferences.smbDomain.collectAsState()
+        val smbPath by downloadPreferences.smbPath.collectAsState()
+
+        LaunchedEffect(smbShareName) {
+            val trimmed = smbShareName.trim()
+            val currentPath = downloadPreferences.smbPath.get().trim()
+            if (trimmed.isNotBlank() && (currentPath.isBlank() || currentPath == "/")) {
+                downloadPreferences.smbPath.set("/${trimmed.lowercase()}")
+            }
+        }
+
+        var showPasswordDialog by rememberSaveable { mutableStateOf(false) }
+        var passwordTarget by rememberSaveable { mutableStateOf("ftp") }
+        var passwordValue by rememberSaveable { mutableStateOf("") }
+        var testResult by remember { mutableStateOf<String?>(null) }
+
+        if (showPasswordDialog) {
+            AlertDialog(
+                onDismissRequest = { showPasswordDialog = false },
+                title = { Text(if (passwordTarget == "smb") stringResource(MR.strings.pref_smb_pass) else stringResource(MR.strings.pref_ftp_pass)) },
+                text = {
+                    OutlinedTextField(
+                        value = passwordValue,
+                        onValueChange = { passwordValue = it },
+                        label = { Text(stringResource(MR.strings.pref_smb_pass)) },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (passwordTarget == "smb") {
+                            downloadPreferences.smbPassword.set(passwordValue)
+                        } else {
+                            downloadPreferences.ftpPassword.set(passwordValue)
+                        }
+                        showPasswordDialog = false
+                    }) { Text(stringResource(MR.strings.action_save)) }
+                },
+                dismissButton = { TextButton(onClick = { showPasswordDialog = false }) { Text(stringResource(MR.strings.action_cancel)) } },
+            )
+        }
+        if (testResult != null) {
+            AlertDialog(
+                onDismissRequest = { testResult = null },
+                title = { Text(stringResource(MR.strings.connection_test)) },
+                text = { Text(testResult.orEmpty()) },
+                confirmButton = { TextButton(onClick = { testResult = null }) { Text(stringResource(MR.strings.action_ok)) } },
+            )
+        }
+
+        val isRemote = isSmb || isFtp
+        val storageItems = listOfNotNull(
+            Preference.PreferenceItem.ListPreference(
+                preference = downloadPreferences.downloadStorageType,
+                entries = mapOf(
+                    "local" to stringResource(MR.strings.pref_download_location_local),
+                    "smb" to stringResource(MR.strings.pref_download_location_smb),
+                    "ftp" to stringResource(MR.strings.pref_download_location_ftp),
+                ),
+                title = stringResource(MR.strings.pref_storage_location),
+                subtitle = when (effectiveType) {
+                    "smb" -> stringResource(MR.strings.pref_download_location_smb)
+                    "ftp" -> stringResource(MR.strings.pref_download_location_ftp)
+                    else -> stringResource(MR.strings.pref_download_location_local)
+                },
+                onValueChanged = { newValue ->
+                    downloadPreferences.ftpDownloadLocation.set(newValue == "ftp")
+                    true
+                },
+            ),
+            if (!isRemote) getStorageLocationPref(storagePreferences, downloadPreferences) else null,
+            if (!isRemote) Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.pref_storage_location_info)) else null,
+
+            if (isSmb) Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.pref_smb_settings)) else null,
+            if (isSmb) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.smbHost,
+                title = stringResource(MR.strings.pref_smb_host),
+                subtitle = smbHost.ifBlank { stringResource(MR.strings.pref_smb_host_hint) },
+            ) else null,
+            if (isSmb) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.smbPort,
+                title = stringResource(MR.strings.pref_smb_port),
+                subtitle = smbPort,
+                onValueChanged = { value -> value.toIntOrNull()?.let { it in 1..65535 } == true },
+            ) else null,
+            if (isSmb) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.smbShareName,
+                title = stringResource(MR.strings.pref_smb_share),
+                subtitle = smbShareName.ifBlank { stringResource(MR.strings.pref_smb_share_hint) },
+                onValueChanged = { newValue ->
+                    val trimmed = newValue.trim()
+                    if (trimmed.isNotBlank()) {
+                        val currentPath = downloadPreferences.smbPath.get().trim()
+                        val oldShare = downloadPreferences.smbShareName.get().trim()
+                        if (currentPath.isBlank() || currentPath == "/" || currentPath.equals("/$oldShare", ignoreCase = true)) {
+                            downloadPreferences.smbPath.set("/${trimmed.lowercase()}")
+                        }
+                    }
+                    true
+                },
+            ) else null,
+            if (isSmb) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.smbUsername,
+                title = stringResource(MR.strings.pref_smb_user),
+                subtitle = smbUsername.ifBlank { stringResource(MR.strings.pref_smb_user_hint) },
+            ) else null,
+            if (isSmb) Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_smb_pass),
+                subtitle = stringResource(MR.strings.pref_smb_pass_hint),
+                onClick = {
+                    passwordTarget = "smb"
+                    passwordValue = downloadPreferences.smbPassword.get()
+                    showPasswordDialog = true
+                },
+            ) else null,
+            if (isSmb) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.smbDomain,
+                title = stringResource(MR.strings.pref_smb_domain),
+                subtitle = smbDomain.ifBlank { stringResource(MR.strings.pref_optional) },
+            ) else null,
+            if (isSmb) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.smbPath,
+                title = stringResource(MR.strings.pref_smb_path),
+                subtitle = smbPath,
+            ) else null,
+            if (isSmb) Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_test_smb),
+                onClick = {
+                    scope.launch {
+                        testResult = runCatching {
+                            SmbDownloadStorage.testConnection(SmbDownloadStorage.config(downloadPreferences))
+                        }.fold(onSuccess = { it }, onFailure = { it.message ?: "Connection failed" })
+                    }
+                },
+            ) else null,
+            if (isFtp) Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.pref_ftp_settings)) else null,
+            if (isFtp) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.ftpHost,
+                title = stringResource(MR.strings.pref_ftp_host),
+                subtitle = ftpHost.ifBlank { stringResource(MR.strings.pref_ftp_host_hint) },
+            ) else null,
+            if (isFtp) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.ftpPort,
+                title = stringResource(MR.strings.pref_ftp_port),
+                subtitle = ftpPort,
+                onValueChanged = { value -> value.toIntOrNull()?.let { it in 1..65535 } == true },
+            ) else null,
+            if (isFtp) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.ftpUsername,
+                title = stringResource(MR.strings.pref_ftp_user),
+                subtitle = downloadPreferences.ftpUsername.get().ifBlank { stringResource(MR.strings.pref_optional) },
+            ) else null,
+            if (isFtp) Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_ftp_pass),
+                subtitle = stringResource(MR.strings.pref_ftp_pass_hint),
+                onClick = {
+                    passwordTarget = "ftp"
+                    passwordValue = downloadPreferences.ftpPassword.get()
+                    showPasswordDialog = true
+                },
+            ) else null,
+            if (isFtp) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.ftpPath,
+                title = stringResource(MR.strings.pref_ftp_path),
+                subtitle = ftpPath,
+            ) else null,
+            if (isFtp) Preference.PreferenceItem.SwitchPreference(
+                preference = downloadPreferences.ftpPassiveMode,
+                title = stringResource(MR.strings.pref_ftp_pasv),
+            ) else null,
+            if (isFtp) Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_test_ftp),
+                onClick = {
+                    scope.launch {
+                        testResult = runCatching {
+                            FtpDownloadStorage.testConnection(FtpDownloadStorage.config(downloadPreferences))
+                        }.fold(onSuccess = { it }, onFailure = { it.message ?: "Connection failed" })
+                    }
+                },
+            ) else null,
+        )
+
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.pref_storage_location),
+            preferenceItems = storageItems,
+        )
+    }
+
+    @Composable
+    private fun getDownloadWorkerGroup(
+        downloadPreferences: DownloadPreferences,
+        stbClient: StbDownloadClient,
+    ): Preference.PreferenceGroup {
+        val scope = rememberCoroutineScope()
+        val downloadWorkerEnabled by downloadPreferences.downloadWorkerEnabled.collectAsState()
+        val stbHost by downloadPreferences.stbWorkerHost.collectAsState()
+        val stbPort by downloadPreferences.stbWorkerPort.collectAsState()
+
+        var testResult by remember { mutableStateOf<String?>(null) }
+        if (testResult != null) {
+            AlertDialog(
+                onDismissRequest = { testResult = null },
+                title = { Text(stringResource(MR.strings.connection_test)) },
+                text = { Text(testResult.orEmpty()) },
+                confirmButton = { TextButton(onClick = { testResult = null }) { Text(stringResource(MR.strings.action_ok)) } },
+            )
+        }
+
+        val workerItems = listOfNotNull(
+            Preference.PreferenceItem.SwitchPreference(
+                preference = downloadPreferences.downloadWorkerEnabled,
+                title = stringResource(MR.strings.pref_download_worker_enable),
+                subtitle = stringResource(MR.strings.pref_download_worker_summary),
+            ),
+            if (downloadWorkerEnabled) Preference.PreferenceItem.SwitchPreference(
+                preference = downloadPreferences.stbWorkerSaveCbz,
+                title = stringResource(MR.strings.pref_worker_save_cbz),
+                subtitle = stringResource(MR.strings.pref_worker_save_cbz_summary),
+            ) else null,
+            if (downloadWorkerEnabled) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.stbWorkerHost,
+                title = stringResource(MR.strings.pref_worker_host),
+                subtitle = stbHost.ifBlank { stringResource(MR.strings.pref_worker_host_hint) },
+            ) else null,
+            if (downloadWorkerEnabled) Preference.PreferenceItem.EditTextPreference(
+                preference = downloadPreferences.stbWorkerPort,
+                title = stringResource(MR.strings.pref_worker_port),
+                subtitle = stbPort,
+                onValueChanged = { value -> value.toIntOrNull()?.let { it in 1..65535 } == true },
+            ) else null,
+            if (downloadWorkerEnabled) {
+                val stbStoragePath by downloadPreferences.stbWorkerStoragePath.collectAsState()
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = downloadPreferences.stbWorkerStoragePath,
+                    title = stringResource(MR.strings.pref_worker_storage_path),
+                    subtitle = stbStoragePath.ifBlank { stringResource(MR.strings.pref_worker_storage_path_hint) },
+                )
+            } else null,
+            if (downloadWorkerEnabled) Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.pref_worker_actions_group)) else null,
+            if (downloadWorkerEnabled) Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_test_worker),
+                subtitle = stringResource(MR.strings.pref_test_worker_summary),
+                onClick = {
+                    scope.launch {
+                        testResult = runCatching { stbClient.testConnection() }
+                            .fold(onSuccess = { it }, onFailure = { it.message ?: "Connection failed" })
+                    }
+                },
+            ) else null,
+            if (downloadWorkerEnabled) Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_worker_dashboard),
+                subtitle = stringResource(MR.strings.pref_worker_dashboard_summary),
+                onClick = {
+                    scope.launch {
+                        testResult = runCatching { stbClient.dashboard() }
+                            .fold(onSuccess = { it }, onFailure = { it.message ?: "Dashboard unavailable" })
+                    }
+                },
+            ) else null,
+            if (downloadWorkerEnabled) Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_worker_pause_all),
+                onClick = { scope.launch { testResult = runCatching { stbClient.controlAll("pause") }.getOrElse { it.message ?: "Action failed" } } },
+            ) else null,
+            if (downloadWorkerEnabled) Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_worker_resume_all),
+                onClick = { scope.launch { testResult = runCatching { stbClient.controlAll("resume") }.getOrElse { it.message ?: "Action failed" } } },
+            ) else null,
+            if (downloadWorkerEnabled) Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_worker_retry_all),
+                onClick = { scope.launch { testResult = runCatching { stbClient.controlAll("retry") }.getOrElse { it.message ?: "Action failed" } } },
+            ) else null,
+            if (downloadWorkerEnabled) Preference.PreferenceItem.TextPreference(
+                title = stringResource(MR.strings.pref_worker_cancel_all),
+                onClick = { scope.launch { testResult = runCatching { stbClient.controlAll("cancel") }.getOrElse { it.message ?: "Action failed" } } },
+            ) else null,
+        )
+
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.pref_category_download_worker),
+            preferenceItems = workerItems,
         )
     }
 

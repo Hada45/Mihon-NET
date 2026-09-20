@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Mihon Worker (Android)</string>
+    <string name="worker_title">Mihon Worker (Android)</string>
+    <string name="worker_desc">Mesin download eksternal untuk Mihon. Mengunduh gambar bab langsung ke penyimpanan perangkat ini.</string>
+    <string name="network_storage_notice">Penyimpanan Jaringan: HANYA MENDUKUNG FTP\n(Di Mihon, pilih lokasi penyimpanan: FTP / Server FTP)</string>
+    <string name="storage_root_label">Folder penyimpanan: %1$s</string>
+    <string name="storage_not_selected">belum dipilih</string>
+    <string name="worker_listening_port">Download Worker: http://%1$s:%2$d (Online)</string>
+    <string name="btn_choose_folder">Pilih folder penyimpanan</string>
+    <string name="hint_port">Port API Worker</string>
+    <string name="hint_concurrency">Jumlah unduhan bersamaan</string>
+    <string name="hint_min_free">Sisa ruang minimum (GB)</string>
+    <string name="hint_history">Masa simpan riwayat tugas (hari)</string>
+    <string name="switch_cbz">Format bawaan sebagai CBZ</string>
+    <string name="switch_cleanup">Hapus otomatis unduhan lama yang selesai saat ruang hampir habis</string>
+    <string name="btn_save_start">Simpan dan jalankan worker</string>
+    <string name="btn_battery_settings">Buka pengaturan baterai</string>
+    
+    <string name="switch_ftp_enabled">Aktifkan server FTP bawaan (berbagi penyimpanan FTP)</string>
+    <string name="hint_ftp_port">Port FTP</string>
+    <string name="hint_ftp_user">Username FTP</string>
+    <string name="hint_ftp_password">Password FTP</string>
+    <string name="ftp_server_label">Server FTP: ftp://%1$s:%2$d (User: %3$s, Pass: %4$s)</string>
+    <string name="ftp_server_disabled">Server FTP: Nonaktif</string>
+</resources>

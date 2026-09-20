@@ -1,4 +1,4 @@
-import mihon.gradle.Config
+﻿import mihon.gradle.Config
 import mihon.gradle.getBuildTime
 import mihon.gradle.getLatestCommitCount
 import mihon.gradle.getLatestCommitSha
@@ -31,7 +31,7 @@ android {
     namespace = "eu.kanade.tachiyomi"
 
     defaultConfig {
-        applicationId = "app.mihon"
+        applicationId = "app.mihon.ftp"
 
         versionCode = 30
         versionName = "0.20.4"
@@ -40,7 +40,7 @@ android {
         buildConfigField("String", "COMMIT_SHA", "\"${getLatestCommitSha()}\"")
         buildConfigField("String", "BUILD_TIME", "\"${getBuildTime(useLatestCommitTime = false)}\"")
         buildConfigField("boolean", "TELEMETRY_INCLUDED", "${Config.includeTelemetry}")
-        buildConfigField("boolean", "UPDATER_ENABLED", "${Config.enableUpdater}")
+        buildConfigField("boolean", "UPDATER_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -325,6 +325,8 @@ dependencies {
 
     // String similarity
     implementation(libs.stringSimilarity)
+    implementation("commons-net:commons-net:3.10.0")
+    implementation("com.hierynomus:smbj:0.13.0")
 
     // Tests
     testImplementation(libs.bundles.test)

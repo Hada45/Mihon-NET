@@ -38,6 +38,7 @@ import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.model.Download
+import eu.kanade.tachiyomi.data.remote.StbDownloadClient
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.Source
@@ -103,6 +104,7 @@ class MangaViewModel(
     private val trackChapter: TrackChapter,
     private val downloadManager: DownloadManager,
     private val downloadCache: DownloadCache,
+    private val stbDownloadClient: StbDownloadClient,
     private val getMangaAndChapters: GetMangaWithChapters,
     private val getDuplicateLibraryManga: GetDuplicateLibraryManga,
     private val getAvailableScanlators: GetAvailableScanlators,
@@ -649,15 +651,24 @@ class MangaViewModel(
     private fun startDownload(
         chapters: List<Chapter>,
         startNow: Boolean,
+        isWorker: Boolean? = null,
     ) {
         val successState = successState ?: return
 
         viewModelScope.launchNonCancellable {
             if (startNow) {
                 val chapterId = chapters.singleOrNull()?.id ?: return@launchNonCancellable
-                downloadManager.startDownloadNow(chapterId)
+                if (isWorker != null) {
+                    downloadManager.startDownloadNow(chapterId, isWorker)
+                } else {
+                    downloadManager.startDownloadNow(chapterId)
+                }
             } else {
-                downloadChapters(chapters)
+                if (isWorker != null) {
+                    downloadChapters(chapters, isWorker)
+                } else {
+                    downloadChapters(chapters)
+                }
             }
 
             if (!isFavorited && !successState.hasPromptedToAddBefore) {
@@ -697,6 +708,10 @@ class MangaViewModel(
             }
             ChapterDownloadAction.DELETE -> {
                 deleteChapters(items.map { it.chapter })
+            }
+            ChapterDownloadAction.REMOTE -> {
+                startDownload(items.map { it.chapter }, startNow = false, isWorker = true)
+                toggleAllSelection(false)
             }
         }
     }
@@ -798,9 +813,13 @@ class MangaViewModel(
      * Downloads the given list of chapters with the manager.
      * @param chapters the list of chapters to download.
      */
-    private suspend fun downloadChapters(chapters: List<Chapter>) {
+    private suspend fun downloadChapters(chapters: List<Chapter>, isWorker: Boolean? = null) {
         val manga = successState?.manga ?: return
-        downloadManager.downloadChapters(manga, chapters)
+        if (isWorker != null) {
+            downloadManager.downloadChapters(manga, chapters, isWorker = isWorker)
+        } else {
+            downloadManager.downloadChapters(manga, chapters)
+        }
         toggleAllSelection(false)
     }
 

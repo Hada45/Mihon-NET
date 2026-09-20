@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Mihon</string>
+    <string name="app_name" translatable="false">Mihon Net</string>
 
     <!-- Generic strings -->
     <string name="on">On</string>
@@ -1102,4 +1102,65 @@
     <string name="donationCampaign.paragraph3">Regardless, Mihon will continue to be maintained by me and the volunteers, and it will stay open source.</string>
     <string name="donationCampaign.contactPlatform">Discord</string>
     <string name="donationCampaign.dismiss">Dismiss</string>
+
+    <!-- Network Storage & Remote Storage -->
+    <string name="pref_category_network_storage">Network storage (SMB/FTP)</string>
+    <string name="pref_download_location">Download location</string>
+    <string name="pref_download_location_local">Internal storage (Device)</string>
+    <string name="pref_download_location_smb">SMB / Windows share (Samba)</string>
+    <string name="pref_download_location_ftp">FTP storage</string>
+    <string name="pref_storage_location_backup_only">Used for automatic backups &amp; local manga (Downloads redirected to remote storage / worker)</string>
+    <string name="pref_smb_settings">SMB / Samba storage settings</string>
+    <string name="pref_smb_host">SMB host / IP</string>
+    <string name="pref_smb_host_hint">Server address (e.g. 192.168.1.10)</string>
+    <string name="pref_smb_port">SMB port</string>
+    <string name="pref_smb_share">SMB share name</string>
+    <string name="pref_smb_share_hint">Shared folder name (e.g. Manga)</string>
+    <string name="pref_smb_user">SMB username</string>
+    <string name="pref_smb_user_hint">Leave blank for guest / anonymous</string>
+    <string name="pref_smb_pass">SMB password</string>
+    <string name="pref_smb_pass_hint">Tap to set password</string>
+    <string name="pref_smb_domain">SMB domain / workgroup</string>
+    <string name="pref_smb_path">Subfolder path within share</string>
+    <string name="pref_test_smb">Test SMB connection</string>
+    <string name="pref_ftp_settings">FTP storage settings</string>
+    <string name="pref_ftp_host">FTP host / IP</string>
+    <string name="pref_ftp_host_hint">Server address (e.g. 192.168.1.10)</string>
+    <string name="pref_ftp_port">FTP port</string>
+    <string name="pref_ftp_user">FTP username</string>
+    <string name="pref_ftp_pass">FTP password</string>
+    <string name="pref_ftp_pass_hint">Tap to set password</string>
+    <string name="pref_ftp_path">Remote directory path</string>
+    <string name="pref_ftp_pasv">Passive mode (PASV)</string>
+    <string name="pref_test_ftp">Test FTP connection</string>
+    <string name="connection_test">Connection test</string>
+
+    <!-- Download Worker -->
+    <string name="pref_category_download_worker">Download Worker</string>
+    <string name="pref_download_worker_enable">Enable Download Worker</string>
+    <string name="pref_download_worker_summary">Offload chapter downloads directly to external Download Worker</string>
+    <string name="pref_worker_save_cbz">Save worker downloads as CBZ</string>
+    <string name="pref_worker_save_cbz_summary">Worker packages downloaded chapters directly into .cbz files</string>
+    <string name="pref_worker_host">Worker host / IP</string>
+    <string name="pref_worker_host_hint">Worker IP address (PC or Android)</string>
+    <string name="pref_worker_port">Worker port</string>
+    <string name="pref_worker_storage_path">Worker storage folder path</string>
+    <string name="pref_worker_storage_path_hint">Not set (e.g. D:\Manga or J:\Manga)</string>
+    <string name="pref_worker_token">Worker token (Optional)</string>
+    <string name="pref_worker_token_summary">Leave blank if worker does not require a token</string>
+    <string name="pref_worker_pair_code">Worker pairing code (Optional)</string>
+    <string name="pref_worker_pair_code_summary">Enter the 6 digit code displayed by Worker</string>
+    <string name="pref_worker_pair_action">Pair worker</string>
+    <string name="pref_worker_actions_group">Worker actions &amp; monitoring</string>
+    <string name="pref_test_worker">Test Download Worker</string>
+    <string name="pref_test_worker_summary">Default port: 2223</string>
+    <string name="pref_worker_dashboard">Download Worker dashboard</string>
+    <string name="pref_worker_dashboard_summary">Storage, queue, progress, and errors</string>
+    <string name="pref_worker_pause_all">Pause all worker downloads</string>
+    <string name="pref_worker_resume_all">Resume all worker downloads</string>
+    <string name="pref_worker_retry_all">Retry failed worker downloads</string>
+    <string name="pref_worker_cancel_all">Cancel active worker downloads</string>
+    <string name="pref_optional">Optional</string>
+
+    <string name="pref_storage_location_local_folder">Local storage folder</string>
 </resources>

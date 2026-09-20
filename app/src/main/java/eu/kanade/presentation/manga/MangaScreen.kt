@@ -723,6 +723,11 @@ private fun SharedMangaBottomActionMenu(
         }.takeIf {
             onDownloadChapter != null && selected.fastAny { it.downloadState != Download.State.DOWNLOADED }
         },
+        onRemoteDownloadClicked = {
+            onDownloadChapter!!(selected.toList(), ChapterDownloadAction.REMOTE)
+        }.takeIf {
+            onDownloadChapter != null && selected.fastAny { it.downloadState != Download.State.DOWNLOADED }
+        },
         onDeleteClicked = {
             onMultiDeleteClicked(selected.fastMap { it.chapter })
         }.takeIf {

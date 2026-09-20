@@ -895,4 +895,65 @@
     <string name="donationCampaign.contactPlatform">Discord</string>
     <string name="donationCampaign.dismiss">Tutup</string>
     <string name="considering">Mempertimbangkan</string>
+
+    <!-- Network Storage & Remote Storage -->
+    <string name="pref_category_network_storage">Penyimpanan jaringan (SMB/FTP)</string>
+    <string name="pref_download_location">Lokasi unduhan</string>
+    <string name="pref_download_location_local">Penyimpanan internal (Perangkat)</string>
+    <string name="pref_download_location_smb">SMB / Berbagi Windows (Samba)</string>
+    <string name="pref_download_location_ftp">Penyimpanan FTP</string>
+    <string name="pref_storage_location_backup_only">Hanya untuk cadangan otomatis &amp; manga lokal (Unduhan dialihkan ke penyimpanan jaringan / worker)</string>
+    <string name="pref_smb_settings">Pengaturan penyimpanan SMB / Samba</string>
+    <string name="pref_smb_host">Host / IP SMB</string>
+    <string name="pref_smb_host_hint">Alamat server (mis. 192.168.1.10)</string>
+    <string name="pref_smb_port">Port SMB</string>
+    <string name="pref_smb_share">Nama share SMB</string>
+    <string name="pref_smb_share_hint">Nama folder bersama (mis. Manga)</string>
+    <string name="pref_smb_user">Nama pengguna SMB</string>
+    <string name="pref_smb_user_hint">Kosongkan untuk anonim / tamu</string>
+    <string name="pref_smb_pass">Kata sandi SMB</string>
+    <string name="pref_smb_pass_hint">Ketuk untuk mengatur kata sandi</string>
+    <string name="pref_smb_domain">Domain / workgroup SMB</string>
+    <string name="pref_smb_path">Path subfolder dalam share</string>
+    <string name="pref_test_smb">Uji koneksi SMB</string>
+    <string name="pref_ftp_settings">Pengaturan penyimpanan FTP</string>
+    <string name="pref_ftp_host">Host / IP FTP</string>
+    <string name="pref_ftp_host_hint">Alamat server (mis. 192.168.1.10)</string>
+    <string name="pref_ftp_port">Port FTP</string>
+    <string name="pref_ftp_user">Nama pengguna FTP</string>
+    <string name="pref_ftp_pass">Kata sandi FTP</string>
+    <string name="pref_ftp_pass_hint">Ketuk untuk mengatur kata sandi</string>
+    <string name="pref_ftp_path">Path direktori jarak jauh</string>
+    <string name="pref_ftp_pasv">Mode pasif (PASV)</string>
+    <string name="pref_test_ftp">Uji koneksi FTP</string>
+    <string name="connection_test">Uji koneksi</string>
+
+    <!-- Download Worker -->
+    <string name="pref_category_download_worker">Download Worker</string>
+    <string name="pref_download_worker_enable">Aktifkan Download Worker</string>
+    <string name="pref_download_worker_summary">Alihkan unduhan chapter langsung ke Download Worker eksternal</string>
+    <string name="pref_worker_save_cbz">Simpan unduhan worker sebagai CBZ</string>
+    <string name="pref_worker_save_cbz_summary">Worker mengemas chapter yang diunduh langsung menjadi file .cbz</string>
+    <string name="pref_worker_host">Host / IP Worker</string>
+    <string name="pref_worker_host_hint">Alamat IP Worker (PC atau Android)</string>
+    <string name="pref_worker_port">Port Worker</string>
+    <string name="pref_worker_storage_path">Path folder penyimpanan di Worker</string>
+    <string name="pref_worker_storage_path_hint">Belum diatur (contoh: D:\Manga atau J:\Manga)</string>
+    <string name="pref_worker_token">Token Worker (Opsional)</string>
+    <string name="pref_worker_token_summary">Kosongkan jika worker tidak memakai token</string>
+    <string name="pref_worker_pair_code">Kode pairing Worker (Opsional)</string>
+    <string name="pref_worker_pair_code_summary">Masukkan 6 digit kode yang tampil di Worker</string>
+    <string name="pref_worker_pair_action">Pairing worker</string>
+    <string name="pref_worker_actions_group">Aksi &amp; pemantauan Worker</string>
+    <string name="pref_test_worker">Uji koneksi Download Worker</string>
+    <string name="pref_test_worker_summary">Port bawaan: 2223</string>
+    <string name="pref_worker_dashboard">Dashboard Download Worker</string>
+    <string name="pref_worker_dashboard_summary">Penyimpanan, antrean, progres, dan log</string>
+    <string name="pref_worker_pause_all">Jeda semua unduhan worker</string>
+    <string name="pref_worker_resume_all">Lanjutkan semua unduhan worker</string>
+    <string name="pref_worker_retry_all">Coba lagi unduhan worker yang gagal</string>
+    <string name="pref_worker_cancel_all">Batalkan unduhan worker yang aktif</string>
+    <string name="pref_optional">Opsional</string>
+
+    <string name="pref_storage_location_local_folder">Folder penyimpanan lokal</string>
 </resources>

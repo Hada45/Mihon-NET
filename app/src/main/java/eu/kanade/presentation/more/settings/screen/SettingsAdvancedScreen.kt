@@ -80,6 +80,23 @@ object SettingsAdvancedScreen : SearchableSettings {
 
         return listOf(
             Preference.PreferenceItem.TextPreference(
+                title = "Log Performa SMB",
+                subtitle = "Salin / bagikan riwayat catatan waktu buka chapter & loading halaman SMB",
+                onClick = {
+                    val logs = eu.kanade.tachiyomi.data.smb.SmbPerfLogger.getLogs()
+                    if (logs.isBlank()) {
+                        context.toast("Belum ada log performa SMB yang tercatat")
+                    } else {
+                        val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Log Performa SMB Mihon")
+                            putExtra(android.content.Intent.EXTRA_TEXT, logs)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(sendIntent, "Log Performa SMB"))
+                    }
+                },
+            ),
+            Preference.PreferenceItem.TextPreference(
                 title = stringResource(MR.strings.pref_dump_crash_logs),
                 subtitle = stringResource(MR.strings.pref_dump_crash_logs_summary),
                 onClick = {

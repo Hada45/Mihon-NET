@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.data.download
+﻿package eu.kanade.tachiyomi.data.download
 
 import android.content.Context
 import com.hippo.unifile.UniFile
@@ -8,7 +8,10 @@ import dev.zacsweers.metro.SingleIn
 import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.domain.manga.model.getComicInfo
 import eu.kanade.tachiyomi.data.cache.ChapterCache
+import eu.kanade.tachiyomi.data.remote.StbDownloadClient
 import eu.kanade.tachiyomi.data.download.model.Download
+import eu.kanade.tachiyomi.data.ftp.FtpDownloadStorage
+import eu.kanade.tachiyomi.data.smb.SmbDownloadStorage
 import eu.kanade.tachiyomi.data.library.LibraryUpdateNotifier
 import eu.kanade.tachiyomi.data.notification.NotificationHandler
 import eu.kanade.tachiyomi.network.HttpException
@@ -61,6 +64,7 @@ import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.track.interactor.GetTracks
 import tachiyomi.i18n.MR
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 import kotlin.time.Duration.Companion.seconds
 
@@ -83,6 +87,7 @@ class Downloader(
     private val getTracks: GetTracks,
     private val store: DownloadStore,
     private val notifier: DownloadNotifier,
+    private val stbDownloadClient: StbDownloadClient,
 ) {
     /**
      * Queue where active downloads are kept.
@@ -106,6 +111,9 @@ class Downloader(
     var isPaused: Boolean = false
 
     init {
+        // Interrupted FTP transfers must not leave complete chapter images in app storage.
+        File(context.cacheDir, "ftp_downloads").deleteRecursively()
+        File(context.cacheDir, "remote_downloads").deleteRecursively()
         launchNow {
             val chapters = async { store.restore() }
             addAllToQueue(chapters.await())
@@ -265,20 +273,28 @@ class Downloader(
      * @param chapters the list of chapters to download.
      * @param autoStart whether to start the downloader after enqueing the chapters.
      */
-    suspend fun queueChapters(manga: Manga, chapters: List<Chapter>, autoStart: Boolean) {
+    suspend fun queueChapters(manga: Manga, chapters: List<Chapter>, autoStart: Boolean, isWorker: Boolean = downloadPreferences.downloadWorkerEnabled.get()) {
         if (chapters.isEmpty()) return
+
+        if (downloadPreferences.isRemoteStorage()) cache.awaitRemoteIndex()
 
         val source = sourceManager.get(manga.source) as? HttpSource ?: return
         val wasEmpty = queueState.value.isEmpty()
         val chaptersToQueue = chapters.asSequence()
             // Filter out those already downloaded.
-            .filter { provider.findChapterDir(it.name, it.scanlator, it.url, manga.title, source) == null }
+            .filter {
+                if (downloadPreferences.isRemoteStorage()) {
+                    !cache.isChapterDownloaded(it.name, it.scanlator, it.url, manga.title, manga.source)
+                } else {
+                    provider.findChapterDir(it.name, it.scanlator, it.url, manga.title, source) == null
+                }
+            }
             // Add chapters to queue from the start.
             .sortedByDescending { it.sourceOrder }
             // Filter out those already enqueued.
             .filter { chapter -> queueState.value.none { it.chapter.id == chapter.id } }
             // Create a download for each one.
-            .map { Download(source, manga, it) }
+            .map { Download(source, manga, it, isWorker) }
             .toList()
 
         if (chaptersToQueue.isNotEmpty()) {
@@ -315,8 +331,108 @@ class Downloader(
      *
      * @param download the chapter to be downloaded.
      */
+    private suspend fun downloadWithWorker(download: Download) {
+        var jobRef: StbDownloadClient.JobRef? = null
+        try {
+            if (!stbDownloadClient.hasConfiguredServer()) {
+                throw IOException("No Download Worker configured")
+            }
+
+            download.status = Download.State.DOWNLOADING
+            notifier.onProgressChange(download)
+
+            val (ref, resolvedPages) = stbDownloadClient.enqueue(
+                download.manga,
+                download.chapter,
+                download.source,
+                download.pages,
+            )
+            jobRef = ref
+            download.pages = resolvedPages
+
+            stbDownloadClient.awaitCompletion(
+                ref = ref,
+                manga = download.manga,
+                chapter = download.chapter,
+                source = download.source,
+                onProgress = { completed, total ->
+                    val pages = download.pages ?: return@awaitCompletion
+                    val actualTotal = if (total > 0) total else pages.size
+                    for (i in 0 until actualTotal.coerceAtMost(pages.size)) {
+                        val page = pages[i]
+                        when {
+                            i < completed -> {
+                                if (page.status != Page.State.Ready) {
+                                    page.status = Page.State.Ready
+                                    page.progress = 100
+                                }
+                            }
+                            i == completed && completed < actualTotal -> {
+                                page.status = Page.State.DownloadImage
+                                page.progress = 50
+                            }
+                            else -> {
+                                if (page.status != Page.State.Queue) {
+                                    page.status = Page.State.Queue
+                                    page.progress = 0
+                                }
+                            }
+                        }
+                    }
+                    notifier.onProgressChange(download)
+                },
+            )
+
+            // Mark all pages ready
+            download.pages?.forEach { page ->
+                page.status = Page.State.Ready
+                page.progress = 100
+            }
+
+            val chapterDirname = provider.getChapterDirName(
+                download.chapter.name,
+                download.chapter.scanlator,
+                download.chapter.url,
+            )
+            val dummyMangaDir = UniFile.fromFile(File(context.cacheDir, "remote_cache")) ?: UniFile.fromFile(context.cacheDir)!!
+            runCatching {
+                cache.addChapter(chapterDirname, dummyMangaDir, download.manga)
+                if (downloadPreferences.saveChaptersAsCBZ.get() || downloadPreferences.stbWorkerSaveCbz.get()) {
+                    cache.addChapter("$chapterDirname.cbz", dummyMangaDir, download.manga)
+                }
+            }
+            cache.invalidateCache()
+
+            download.status = Download.State.DOWNLOADED
+        } catch (error: Throwable) {
+            if (error is CancellationException) {
+                jobRef?.let { ref ->
+                    runCatching { stbDownloadClient.cancel(ref) }
+                }
+                throw error
+            }
+            logcat(LogPriority.ERROR, error)
+            download.status = Download.State.ERROR
+            notifier.onError(error.message, download.chapter.name, download.manga.title, download.manga.id)
+        }
+    }
+
     private suspend fun downloadChapter(download: Download) {
-        val mangaDir = provider.getMangaDir(download.manga.title, download.source).getOrElse { e ->
+        if (download.isWorker || downloadPreferences.downloadWorkerEnabled.get()) {
+            downloadWithWorker(download)
+            return
+        }
+        val isRemote = downloadPreferences.isRemoteStorage()
+        val isSmb = downloadPreferences.isSmbStorage()
+        val stagingDir = File(context.cacheDir, "remote_downloads/${download.manga.id}/${download.chapter.id}")
+        val mangaDirResult = if (isRemote) {
+            stagingDir.mkdirs()
+            UniFile.fromFile(stagingDir)?.let { Result.success(it) }
+                ?: Result.failure(IOException("Cannot create remote staging directory"))
+        } else {
+            provider.getMangaDir(download.manga.title, download.source)
+        }
+        val mangaDir = mangaDirResult.getOrElse { e ->
             download.status = Download.State.ERROR
             notifier.onError(e.message, download.chapter.name, download.manga.title, download.manga.id)
             return
@@ -324,6 +440,7 @@ class Downloader(
 
         val availSpace = DiskUtil.getAvailableStorageSpace(mangaDir)
         if (availSpace != -1L && availSpace < MIN_DISK_SPACE) {
+            if (isRemote) stagingDir.deleteRecursively()
             download.status = Download.State.ERROR
             notifier.onError(
                 context.stringResource(MR.strings.download_insufficient_space),
@@ -396,14 +513,35 @@ class Downloader(
             )
 
             // Only rename the directory if it's downloaded
-            if (downloadPreferences.saveChaptersAsCBZ.get()) {
+            if (isRemote) {
+                val sourceDirName = provider.getSourceDirName(download.source)
+                val mangaDirName = provider.getMangaDirName(download.manga.title)
+                val stagedFile = File(tmpDir.filePath ?: throw IOException("Remote staging path unavailable"))
+                if (isSmb) {
+                    SmbDownloadStorage.uploadChapter(
+                        SmbDownloadStorage.config(downloadPreferences),
+                        sourceDirName,
+                        mangaDirName,
+                        chapterDirname,
+                        stagedFile,
+                    )
+                } else {
+                    FtpDownloadStorage.uploadChapter(
+                        FtpDownloadStorage.config(downloadPreferences),
+                        sourceDirName,
+                        mangaDirName,
+                        chapterDirname,
+                        stagedFile,
+                    )
+                }
+            } else if (downloadPreferences.saveChaptersAsCBZ.get()) {
                 archiveChapter(mangaDir, chapterDirname, tmpDir)
             } else {
                 tmpDir.renameTo(chapterDirname)
             }
             cache.addChapter(chapterDirname, mangaDir, download.manga)
 
-            DiskUtil.createNoMediaFile(tmpDir, context)
+            if (!isRemote) DiskUtil.createNoMediaFile(tmpDir, context)
 
             download.status = Download.State.DOWNLOADED
         } catch (error: Throwable) {
@@ -412,6 +550,8 @@ class Downloader(
             logcat(LogPriority.ERROR, error)
             download.status = Download.State.ERROR
             notifier.onError(error.message, download.chapter.name, download.manga.title, download.manga.id)
+        } finally {
+            if (isRemote) stagingDir.deleteRecursively()
         }
     }
 

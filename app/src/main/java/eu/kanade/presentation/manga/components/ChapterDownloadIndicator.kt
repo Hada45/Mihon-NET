@@ -3,6 +3,7 @@ package eu.kanade.presentation.manga.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +34,7 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.ArrowDownward
 import mihon.icons.materialsymbols.rounded.Error
+import mihon.icons.materialsymbols.rounded.Storage
 import mihon.icons.materialsymbols.roundedfilled.CheckCircle
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.IconButtonTokens
@@ -44,11 +46,13 @@ enum class ChapterDownloadAction {
     START_NOW,
     CANCEL,
     DELETE,
+    REMOTE,
 }
 
 @Composable
 fun ChapterDownloadIndicator(
     enabled: Boolean,
+    remoteEnabled: Boolean = false,
     downloadStateProvider: () -> Download.State,
     downloadProgressProvider: () -> Int,
     onClick: (ChapterDownloadAction) -> Unit,
@@ -57,6 +61,7 @@ fun ChapterDownloadIndicator(
     when (val downloadState = downloadStateProvider()) {
         Download.State.NOT_DOWNLOADED -> NotDownloadedIndicator(
             enabled = enabled,
+            remoteEnabled = remoteEnabled,
             modifier = modifier,
             onClick = onClick,
         )
@@ -83,27 +88,51 @@ fun ChapterDownloadIndicator(
 @Composable
 private fun NotDownloadedIndicator(
     enabled: Boolean,
+    remoteEnabled: Boolean,
     modifier: Modifier = Modifier,
     onClick: (ChapterDownloadAction) -> Unit,
 ) {
-    Box(
-        modifier = modifier
-            .size(IconButtonTokens.StateLayerSize)
-            .commonClickable(
-                enabled = enabled,
-                hapticFeedback = LocalHapticFeedback.current,
-                onLongClick = { onClick(ChapterDownloadAction.START_NOW) },
-                onClick = { onClick(ChapterDownloadAction.START) },
+    Row(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .size(IconButtonTokens.StateLayerSize)
+                .commonClickable(
+                    enabled = enabled,
+                    hapticFeedback = LocalHapticFeedback.current,
+                    onLongClick = { onClick(ChapterDownloadAction.START_NOW) },
+                    onClick = { onClick(ChapterDownloadAction.START) },
+                )
+                .secondaryItemAlpha(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_download_chapter_24dp),
+                contentDescription = stringResource(MR.strings.manga_download),
+                modifier = Modifier.size(IndicatorSize),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            .secondaryItemAlpha(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_download_chapter_24dp),
-            contentDescription = stringResource(MR.strings.manga_download),
-            modifier = Modifier.size(IndicatorSize),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        }
+        if (remoteEnabled) {
+            Box(
+                modifier = Modifier
+                    .size(IconButtonTokens.StateLayerSize)
+                    .commonClickable(
+                        enabled = enabled,
+                        hapticFeedback = LocalHapticFeedback.current,
+                    onLongClick = { onClick(ChapterDownloadAction.REMOTE) },
+                    onClick = { onClick(ChapterDownloadAction.REMOTE) },
+                    )
+                    .secondaryItemAlpha(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = MaterialSymbols.Rounded.Storage,
+                    contentDescription = "Download via Worker",
+                    modifier = Modifier.size(IndicatorSize),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
     }
 }
 

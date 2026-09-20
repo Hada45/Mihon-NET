@@ -45,7 +45,7 @@ class DownloadHolder(private val view: View, val adapter: DownloadAdapter) :
         if (pages == null) {
             binding.downloadProgress.progress = 0
             binding.downloadProgress.max = 1
-            binding.downloadProgressText.text = ""
+            binding.downloadProgressText.text = if (download.isWorker) "Worker ..." else ""
         } else {
             binding.downloadProgress.max = pages.size * 100
             notifyProgress()
@@ -69,7 +69,8 @@ class DownloadHolder(private val view: View, val adapter: DownloadAdapter) :
      */
     fun notifyDownloadedPages() {
         val pages = download.pages ?: return
-        binding.downloadProgressText.text = "${download.downloadedImages}/${pages.size}"
+        val prefix = if (download.isWorker) "Worker " else ""
+        binding.downloadProgressText.text = "$prefix${download.downloadedImages}/${pages.size}"
     }
 
     override fun onItemReleased(position: Int) {
